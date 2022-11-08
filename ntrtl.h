@@ -1445,7 +1445,7 @@ RtlInitEmptyUnicodeString(
 #ifndef PHNT_NO_INLINE_INIT_STRING
 FORCEINLINE VOID RtlInitUnicodeString(
     _Out_ PUNICODE_STRING DestinationString,
-    _In_opt_ PCWSTR SourceString
+    _In_opt_z_ PCWSTR SourceString
     )
 {
     if (SourceString)
@@ -1465,6 +1465,32 @@ RtlInitUnicodeString(
     );
 #endif
 
+#ifndef PHNT_NO_INLINE_INIT_STRING
+FORCEINLINE NTSTATUS RtlInitUnicodeStringEx(
+    _Out_ PUNICODE_STRING DestinationString,
+    _In_opt_z_ PCWSTR SourceString
+    )
+{
+    size_t stringLength;
+
+    DestinationString->Length = 0;
+    DestinationString->Buffer = (PWCH)SourceString;
+
+    if (!SourceString)
+        return STATUS_SUCCESS;
+
+    stringLength = wcslen(SourceString);
+
+    if (stringLength <= UNICODE_STRING_MAX_CHARS - 1)
+    {
+        DestinationString->Length = (USHORT)stringLength * sizeof(WCHAR);
+        DestinationString->MaximumLength = DestinationString->Length + sizeof(UNICODE_NULL);
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_NAME_TOO_LONG;
+}
+#else
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -1472,6 +1498,7 @@ RtlInitUnicodeStringEx(
     _Out_ PUNICODE_STRING DestinationString,
     _In_opt_z_ PCWSTR SourceString
     );
+#endif
 
 _Success_(return != 0)
 _Must_inspect_result_
@@ -2655,6 +2682,7 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
     UNICODE_STRING HeapPartitionName; // 19H1
     ULONG_PTR DefaultThreadpoolCpuSetMasks;
     ULONG DefaultThreadpoolCpuSetMaskCount;
+    ULONG DefaultThreadpoolThreadMaximum;
 } RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
 
 #define RTL_USER_PROC_PARAMS_NORMALIZED 0x00000001
@@ -3280,6 +3308,18 @@ RtlReleaseActivationContext(
     _In_ HANDLE ActCtx
     );
 
+// kernel32!FindActCtxSectionString
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlFindActivationContextSectionString(
+    _In_ ULONG Flags,
+    _In_ const GUID* ExtensionGuid,
+    _In_ ULONG SectionId,
+    _In_ const UNICODE_STRING* StringToFind,
+    _Out_ PACTCTX_SECTION_KEYED_DATA ReturnedData
+    );
+
 // Images
 
 NTSYSAPI
@@ -3818,6 +3858,22 @@ RtlDoesFileExists_U(
     _In_ PCWSTR FileName
     );
 
+// ros
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlDosApplyFileIsolationRedirection_Ustr(
+    _In_ ULONG                  Flags,
+    _In_ PUNICODE_STRING        OriginalName,
+    _In_ PUNICODE_STRING        Extension,
+    _In_opt_ PUNICODE_STRING    StaticString,
+    _In_opt_ PUNICODE_STRING    DynamicString,
+    _In_opt_ PUNICODE_STRING*   NewName,
+    _In_ PULONG                 NewFlags,
+    _In_ PSIZE_T                FileNameSize,
+    _In_ PSIZE_T                RequiredLength
+    );
+
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -3918,7 +3974,7 @@ RtlReplaceSystemDirectoryInPath(
     );
 #endif
 
-#if (PHNT_VERSION >= PHNT_21H2)
+#if (PHNT_VERSION >= PHNT_WIN10_21H2)
 // rev
 NTSYSAPI
 NTSTATUS
@@ -5573,7 +5629,7 @@ RtlGetSystemTimePrecise(
     );
 #endif
 
-#if (PHNT_VERSION >= PHNT_21H2)
+#if (PHNT_VERSION >= PHNT_WIN10_21H2)
 NTSYSAPI
 KSYSTEM_TIME
 NTAPI
@@ -9031,6 +9087,89 @@ RtlUnsubscribeFromFeatureUsageNotifications(
     _In_ PRTL_FEATURE_CONFIGURATION FeatureConfiguration,
     _In_ ULONG FeatureConfigurationCount
     );
+#endif
+
+#if (PHNT_VERSION >= PHNT_VISTA)
+
+NTSYSAPI
+VOID
+NTAPI
+RtlRunOnceInitialize(
+    _Out_ PRTL_RUN_ONCE RunOnce
+    );
+
+typedef _Function_class_(RTL_RUN_ONCE_INIT_FN)
+LOGICAL NTAPI RTL_RUN_ONCE_INIT_FN(
+    _Inout_ PRTL_RUN_ONCE RunOnce,
+    _Inout_opt_ PVOID Parameter,
+    _Inout_opt_ PVOID *Context
+    );
+typedef RTL_RUN_ONCE_INIT_FN *PRTL_RUN_ONCE_INIT_FN;
+
+_Maybe_raises_SEH_exception_
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlRunOnceExecuteOnce(
+    _Inout_ PRTL_RUN_ONCE RunOnce,
+    _In_ __callback PRTL_RUN_ONCE_INIT_FN InitFn,
+    _Inout_opt_ PVOID Parameter,
+    _Outptr_opt_result_maybenull_ PVOID *Context
+    );
+
+_Must_inspect_result_
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlRunOnceBeginInitialize(
+    _Inout_ PRTL_RUN_ONCE RunOnce,
+    _In_ ULONG Flags,
+    _Outptr_opt_result_maybenull_ PVOID *Context
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlRunOnceComplete(
+    _Inout_ PRTL_RUN_ONCE RunOnce,
+    _In_ ULONG Flags,
+    _In_opt_ PVOID Context
+    );
+
+#endif
+
+#if (PHNT_VERSION >= PHNT_THRESHOLD)
+
+typedef NTSTATUS (NTAPI *PWNF_USER_CALLBACK)(
+    _In_ WNF_STATE_NAME StateName,
+    _In_ WNF_CHANGE_STAMP ChangeStamp,
+    _In_ PWNF_TYPE_ID TypeId,
+    _In_opt_ PVOID CallbackContext,
+    _In_ PVOID Buffer,
+    _In_ ULONG BufferSize
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSubscribeWnfStateChangeNotification(
+    _Outptr_ PVOID* SubscriptionHandle,
+    _In_ WNF_STATE_NAME StateName,
+    _In_ WNF_CHANGE_STAMP ChangeStamp,
+    _In_ PWNF_USER_CALLBACK Callback,
+    _In_opt_ PVOID CallbackContext,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_opt_ ULONG SerializationGroup,
+    _Reserved_ ULONG Flags
+    );
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlUnsubscribeWnfStateChangeNotification(
+    _In_ PWNF_USER_CALLBACK Callback
+    );
+
 #endif
 
 #endif

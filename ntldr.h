@@ -301,6 +301,17 @@ LdrGetDllFullName(
 NTSYSAPI
 NTSTATUS
 NTAPI
+LdrGetDllPath(
+    _In_  PCWSTR DllName,
+    _In_  ULONG  Flags, // LOAD_LIBRARY_SEARCH_*
+    _Out_ PWSTR* DllPath,
+    _Out_ PWSTR* SearchPaths
+    );
+
+// rev
+NTSYSAPI
+NTSTATUS
+NTAPI
 LdrGetDllDirectory(
     _Out_ PUNICODE_STRING DllDirectory
     );
@@ -398,7 +409,7 @@ NTSTATUS
 NTAPI
 LdrUnlockLoaderLock(
     _In_ ULONG Flags,
-    _Inout_ PVOID Cookie
+    _In_ PVOID Cookie
     );
 
 NTSYSAPI
@@ -433,6 +444,19 @@ LdrProcessRelocationBlock(
     _In_ PUSHORT NextOffset,
     _In_ LONG_PTR Diff
     );
+
+#if (PHNT_VERSION >= PHNT_WIN8)
+NTSYSAPI
+PIMAGE_BASE_RELOCATION
+NTAPI
+LdrProcessRelocationBlockEx(
+    _In_ ULONG Machine, // IMAGE_FILE_MACHINE_AMD64|IMAGE_FILE_MACHINE_ARM|IMAGE_FILE_MACHINE_THUMB|IMAGE_FILE_MACHINE_ARMNT
+    _In_ ULONG_PTR VA,
+    _In_ ULONG SizeOfBlock,
+    _In_ PUSHORT NextOffset,
+    _In_ LONG_PTR Diff
+    );
+#endif
 
 NTSYSAPI
 BOOLEAN
@@ -797,7 +821,7 @@ LdrLoadAlternateResourceModuleEx(
 
 // rev
 NTSYSAPI
-NTSTATUS
+BOOLEAN
 NTAPI
 LdrUnloadAlternateResourceModule(
     _In_ PVOID DllHandle
@@ -805,7 +829,7 @@ LdrUnloadAlternateResourceModule(
 
 // rev
 NTSYSAPI
-NTSTATUS
+BOOLEAN
 NTAPI
 LdrUnloadAlternateResourceModuleEx(
     _In_ PVOID DllHandle,
@@ -951,11 +975,24 @@ typedef PVOID (NTAPI *PDELAYLOAD_FAILURE_DLL_CALLBACK)(
 // rev
 typedef PVOID (NTAPI *PDELAYLOAD_FAILURE_SYSTEM_ROUTINE)(
     _In_ PCSTR DllName,
-    _In_ PCSTR ProcName
+    _In_ PCSTR ProcedureName
     );
 
+#if (PHNT_VERSION >= PHNT_THRESHOLD)
+// rev from QueryOptionalDelayLoadedAPI
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrQueryOptionalDelayLoadedAPI(
+    _In_ PVOID ParentModuleBase,
+    _In_ PCSTR DllName,
+    _In_ PCSTR ProcedureName,
+    _Reserved_ ULONG Flags
+    );
+#endif
+
 #if (PHNT_VERSION >= PHNT_WIN8)
-// rev
+// rev from ResolveDelayLoadedAPI
 NTSYSAPI
 PVOID
 NTAPI
@@ -968,22 +1005,39 @@ LdrResolveDelayLoadedAPI(
     _Reserved_ ULONG Flags
     );
 
-// rev
+// rev from ResolveDelayLoadsFromDll
 NTSYSAPI
 NTSTATUS
 NTAPI
 LdrResolveDelayLoadsFromDll(
-    _In_ PVOID ParentBase,
+    _In_ PVOID ParentModuleBase,
     _In_ PCSTR TargetDllName,
     _Reserved_ ULONG Flags
     );
 
-// rev
+// rev from SetDefaultDllDirectories
 NTSYSAPI
 NTSTATUS
 NTAPI
 LdrSetDefaultDllDirectories(
     _In_ ULONG DirectoryFlags
+    );
+
+// rev from AddDllDirectory
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrAddDllDirectory(
+    _In_ PUNICODE_STRING NewDirectory,
+    _Out_ PDLL_DIRECTORY_COOKIE Cookie
+    );
+
+// rev from RemoveDllDirectory
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrRemoveDllDirectory(
+    _In_ DLL_DIRECTORY_COOKIE Cookie
     );
 #endif
 
@@ -1030,6 +1084,16 @@ BOOLEAN
 NTAPI
 LdrIsModuleSxsRedirected(
     _In_ PVOID DllHandle
+    );
+#endif
+
+#if (PHNT_VERSION >= PHNT_THRESHOLD)
+// rev
+NTSYSAPI
+NTSTATUS
+NTAPI
+LdrUpdatePackageSearchPath(
+    _In_ PWSTR SearchPath
     );
 #endif
 
